@@ -165,13 +165,15 @@ uint32_t ** Points::array_create(unsigned short rows_count, unsigned short cols_
 
         this->array = new uint32_t*[this->rows_count];
 
-        for(unsigned short row_cur = 0; row_cur < this->rows_count; row_cur++)
+        if(this->array != nullptr)
         {
-            this->array[row_cur] = new uint32_t[this->cols_dwords_count]();
-        } 
-
+            for(unsigned short row_cur = 0; row_cur < this->rows_count; row_cur++)
+            {
+                this->array[row_cur] = new uint32_t[this->cols_dwords_count]();
+            }   
+            this->array_was_created = true;
+        }
         this->array_was_changed = true;
-        this->array_was_created = true;
     }
 
     return this->array;
