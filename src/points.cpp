@@ -79,7 +79,6 @@ Points::Points(const char * config_file_addr, status_t * status)
         if(row >= rows_count)
         {
             (*status) = status_t::ARRAY_ROW_NUM_OVERRANGE;
-            this->array_delete();
             config_file.close();
             return;
         }
@@ -94,7 +93,6 @@ Points::Points(const char * config_file_addr, status_t * status)
         if(col >= cols_count)
         {
             (*status) = status_t::ARRAY_COL_NUM_OVERRANGE;
-            this->array_delete();
             config_file.close();
             return;
         }
