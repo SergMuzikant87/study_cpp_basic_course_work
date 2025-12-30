@@ -1,144 +1,156 @@
 #include "../inc/points.h"
-#include "../inc/status_codes.h"
 #include <iostream>
 #include <fstream>
 
-//Максимальное количество строк и столбцов массива точек
-#define POINTS_ARRAY_ROWS_COUNT_MAX ((1 << (sizeof(unsigned short) << 2)) >> 1)
-#define POINTS_ARRAY_COLS_COUNT_MAX ((1 << (sizeof(unsigned short) << 2)) >> 1)
+//Максимальное и минимальное количество строк и столбцов массива точек
+#define POINTS_ARRAY_ROWS_COUNT_MAXIMUM ((int32_t)((((uint32_t)1) << (sizeof(uint8_t) << 3)) - ((uint32_t)1)))
+#define POINTS_ARRAY_COLS_COUNT_MAXIMUM ((int32_t)((((uint32_t)1) << (sizeof(uint8_t) << 3)) - ((uint32_t)1)))
+#define POINTS_ARRAY_ROWS_COUNT_MINUMUM ((int32_t)1)
+#define POINTS_ARRAY_COLS_COUNT_MINIMUM ((int32_t)1)
 
 //Расчёт количества двойных слов, требуемых для представления всех столбцов одной строки
-#define cols_dwords_count_calc(cols_count) ((cols_count + 31 ) >> 5)
+#define cols_dwords_count_calc(cols_count) ((cols_count + 63 ) >> 6)
 //На входе макроса номер столбца, на выходе номер двойного слова в котором находится этот столбец
-#define cols_dword_num_calc(col) ((col) >> 5)
+#define cols_dword_num_calc(col) ((col) >> 6)
 //Формирование маски столбца в двойном слове
-#define col_mask_calc(col) (((uint32_t)1) << ((col) & 31))
+#define col_mask_calc(col) (((uint64_t)1) << ((col) & 0x3F))
 //
 #define dword_update(dword, mask, value)\
 {\
-    dword &= (~((uint32_t)mask));\
-    dword |= (((uint32_t)mask) & (~(((uint32_t)(value != 0)) - ((uint32_t) 1))));\
+    dword &= (~((uint64_t)mask));\
+    dword |= (((uint64_t)mask) & (~(((uint64_t)(value != 0)) - ((uint64_t) 1))));\
 } 
 
-
-Points::Points(const char * config_file_addr, status_t * status)
+Points::Points(const char * config_file_addr, error_codes_t * error_code)
 {
     this->variables_clean();
-
     std::ifstream config_file;
-    config_file.open(config_file_addr);
-    if(!config_file.is_open())
-    {
-        (*status) = status_t::CONFIG_FILE_OPEN_ERROR;
-        return;
-    }
-    
-    unsigned short rows_count {};
-    unsigned short cols_count {};
+    config_file.exceptions(std::ifstream::badbit);
 
-    if(!(config_file >> rows_count)) 
+    try
     {
-        (*status) = status_t::CONFIG_FILE_ROWS_COUNT_READ_ERROR;
+        config_file.open(config_file_addr, std::ifstream::in);
+        if(!config_file.is_open())
+        {
+            throw error_codes_t::CONFIG_FILE_OPEN_ERROR;
+        }
+
+        int32_t rows_count_int32 {};
+        int32_t cols_count_int32 {};
+
+        if(!(config_file >> rows_count_int32)) 
+        {
+            throw error_codes_t::CONFIG_FILE_ROWS_COUNT_READ_ERROR;
+        }
+
+        if(!(config_file >> cols_count_int32)) 
+        {
+            throw error_codes_t::CONFIG_FILE_COLS_COUNT_READ_ERROR;
+        }
+
+        if(((*error_code) = Points::array_size_check(rows_count_int32, cols_count_int32)) != error_codes_t::OK)
+        {
+            throw (*error_code);
+        }
+
+        this->array_create(static_cast<uint8_t>(rows_count_int32), static_cast<uint8_t>(cols_count_int32));
+        if(((*error_code) = this->array_check()) != error_codes_t::OK)
+        {
+            throw (*error_code);
+        }
+
+        uint16_t points_count_read_allowed = (static_cast<uint16_t>(rows_count_int32) * static_cast<uint16_t>(cols_count_int32));
+
+        while(1)
+        {
+
+            int32_t row_num_int32 = 0;
+            int32_t col_num_int32 = 0;
+
+            if(!(config_file >> row_num_int32)) 
+            {
+                break;
+            }
+
+            if(row_num_int32 >= rows_count_int32)
+            {
+                throw error_codes_t::ARRAY_ROW_NUM_OVERRANGE;
+            }
+
+            if(row_num_int32 < 0)
+            {
+                throw error_codes_t::ARRAY_ROW_NUM_UNDERRANGE;
+            }
+
+            if(!(config_file >> col_num_int32)) 
+            {
+                throw error_codes_t::CONFIG_FILE_COL_READ_ERROR;
+            }
+
+            if(col_num_int32 >= cols_count_int32)
+            {
+                throw error_codes_t::ARRAY_COL_NUM_OVERRANGE;
+            }
+
+            if(col_num_int32 < 0)
+            {
+                throw error_codes_t::ARRAY_COL_NUM_UNDERRANGE;
+            }
+
+            if(points_count_read_allowed == 0)
+            {
+                error_print("WARNING: Точек в конфигарационном файле больше, чем в созданном массиве.", ((*error_code) = error_codes_t::CONFIG_FILE_POINTS_COUNT_IS_MANY));
+            }
+            points_count_read_allowed -= (points_count_read_allowed != 0);
+            
+            this->point_value_set(static_cast<uint8_t>(row_num_int32), static_cast<uint8_t>(col_num_int32), 1);
+        }
+
+        (*error_code) = OK;
+    }
+    catch(error_codes_t ex_code)
+    {
+        (*error_code) = ex_code;
+    }
+    catch(...)
+    {
+        (*error_code) = error_codes_t::POINTS_OTHER_ERROR;
+    }
+
+    if(config_file.is_open())
+    {
         config_file.close();
-        return;
     }
 
-    if(!(config_file >> cols_count)) 
-    {
-        (*status) = status_t::CONFIG_FILE_COLS_COUNT_READ_ERROR;
-        config_file.close();
-        return;
-    }
-
-    if(((*status) = this->array_size_check(rows_count, cols_count)) != status_t::OK)
-    {
-        config_file.close();
-        return;
-    }
-
-    this->array_create(rows_count, cols_count);
-    if(((*status) = this->array_check()) != status_t::OK)
-    {
-        config_file.close();
-        return;
-    }
-
-    unsigned short points_count_read_allowed = (rows_count * cols_count);
-
-    while(1)
-    {
-        unsigned short row = 0;
-        unsigned short col = 0;
-
-        if(!(config_file >> row)) 
-        {
-            config_file.close();
-            break;
-        }
-
-        if(row >= rows_count)
-        {
-            (*status) = status_t::ARRAY_ROW_NUM_OVERRANGE;
-            config_file.close();
-            return;
-        }
-
-        if(!(config_file >> col)) 
-        {
-            (*status) = status_t::CONFIG_FILE_COL_READ_ERROR;
-            config_file.close();
-            return;
-        }
-
-        if(col >= cols_count)
-        {
-            (*status) = status_t::ARRAY_COL_NUM_OVERRANGE;
-            config_file.close();
-            return;
-        }
-
-        if(points_count_read_allowed == 0)
-        {
-            (*status) = status_t::CONFIG_FILE_POINTS_COUNT_IS_MANY;
-            std::cout << "WARNING: Точек в конфигарационном файле больше, чем в созданном массиве. Код ошибки: " << (*status) << "\n";
-        }
-        points_count_read_allowed -= (points_count_read_allowed != 0);
-
-        this->point_value_set(row, col, 1);
-    }
-    
-    (*status) = OK;
-    config_file.close();
-    return;
 }
 
-Points::Points(unsigned short rows_count, unsigned short cols_count, status_t * status)
+Points::Points(uint8_t rows_count, uint8_t cols_count, error_codes_t * error_code)
 {
-    *status = status_t::OK;
+    *error_code = error_codes_t::OK;
 
-    if(((*status) = this->array_size_check(rows_count, cols_count)) != status_t::OK)
+    if(((*error_code) = Points::array_size_check(static_cast<int32_t>(rows_count), static_cast<int32_t>(cols_count))) != error_codes_t::OK)
     {
         return;
     }
     this->variables_clean();
     this->array_create(rows_count, cols_count);
-    *status = this->array_check();
+    *error_code = this->array_check();
 }
 
 Points::~Points(void)
 {
-    status_t status = status_t::OK;
+    error_codes_t error_code = error_codes_t::OK;
     if(this->array_was_created)
     {
-        if((status = this->array_check()) != status_t::OK)
+        if((error_code = this->array_check()) != error_codes_t::OK)
         {
-            std::cout << "WARNING: Удаление массива. Массив не в порядке. Код ошибки: " << status << "\n";
+            error_print("WARNING: Удаление массива. Массив не в порядке.", error_code);
         }
         this->array_delete();
     }
     else
     {
-        std::cout << "WARNING: Массив не был создан. Код ошибки: " << (status = status_t::ARRAY_IS_NOT_FOUND) << "\n";
+        error_print("WARNING: Массив не был создан.",(error_code = error_codes_t::ARRAY_IS_NOT_FOUND));
     }
 }
 
@@ -155,7 +167,7 @@ void Points::variables_clean(void)
     this->cols_count = 0;
 }
 
-uint32_t ** Points::array_create(unsigned short rows_count, unsigned short cols_count)
+uint64_t ** Points::array_create(uint8_t rows_count, uint8_t cols_count)
 {
     if(!this->array_was_created)
     {
@@ -163,13 +175,13 @@ uint32_t ** Points::array_create(unsigned short rows_count, unsigned short cols_
         this->cols_count = cols_count;
         this->cols_dwords_count = cols_dwords_count_calc(this->cols_count);
 
-        this->array = new uint32_t*[this->rows_count];
+        this->array = new uint64_t*[this->rows_count];
 
         if(this->array != nullptr)
         {
-            for(unsigned short row_cur = 0; row_cur < this->rows_count; row_cur++)
+            for(uint8_t row_cur = 0; row_cur < this->rows_count; row_cur++)
             {
-                this->array[row_cur] = new uint32_t[this->cols_dwords_count]();
+                this->array[row_cur] = new uint64_t[this->cols_dwords_count]();
             }   
             this->array_was_created = true;
         }
@@ -185,7 +197,7 @@ void Points::array_delete(void)
     this->array_was_created = false;
     if(this->array != nullptr)
     {
-        for(unsigned short row_cur = 0; row_cur < this->rows_count; row_cur++)
+        for(uint8_t row_cur = 0; row_cur < this->rows_count; row_cur++)
         {
             if(this->array[row_cur] != nullptr)
             {
@@ -196,66 +208,66 @@ void Points::array_delete(void)
     }
 }
 
-uint32_t ** Points::array_resize(unsigned short rows_count, unsigned short cols_count)
+uint64_t ** Points::array_resize(uint8_t rows_count, uint8_t cols_count)
 {
     this->array_delete();
     return this->array_create(rows_count, cols_count);
 }
 
-status_t Points::array_check(void)
+error_codes_t Points::array_check(void)
 {
-    if((this->array_size_check(this->rows_count, this->cols_count)) != status_t::OK)
+    if((Points::array_size_check(static_cast<int32_t>(this->rows_count), static_cast<int32_t>(this->cols_count))) != error_codes_t::OK)
     {
         //Возвращается другой код ошибки потому что проверка именно после того как массив создан.
-        return status_t::ARRAY_SIZE_ERROR_AFTER_CREAT; 
+        return error_codes_t::ARRAY_SIZE_ERROR_AFTER_CREAT; 
     }
 
     if(this->array == nullptr)
     {
-        return status_t::ARRAY_POINTER_ERROR;
+        return error_codes_t::ARRAY_POINTER_ERROR;
     }
 
-    for(unsigned short row_cur = 0; row_cur < this->rows_count; row_cur++)
+    for(uint8_t row_cur = 0; row_cur < this->rows_count; row_cur++)
     {
         if(this->array[row_cur] == nullptr)
         {
-            return status_t::SUB_ARRAY_POINTER_ERROR;
+            return error_codes_t::SUB_ARRAY_POINTER_ERROR;
         }
     } 
 
-    return status_t::OK;
+    return error_codes_t::OK;
 }
 
-status_t Points::array_size_check(unsigned short rows_count, unsigned short cols_count)
+error_codes_t Points::array_size_check(int32_t rows_count, int32_t cols_count)
 {
-    if(rows_count >= POINTS_ARRAY_ROWS_COUNT_MAX)
+    if(rows_count > POINTS_ARRAY_ROWS_COUNT_MAXIMUM)
     {
-        return status_t::ARRAY_ROWS_COUNT_OVERRANGE;
+        return error_codes_t::ARRAY_ROWS_COUNT_OVERRANGE;
     }
 
-    if(rows_count == 0)
+    if(rows_count < POINTS_ARRAY_ROWS_COUNT_MINUMUM)
     {
-        return status_t::ARRAY_ROWS_COUNT_UNDERRANGE;
+        return error_codes_t::ARRAY_ROWS_COUNT_UNDERRANGE;
     }
 
-    if(cols_count >= POINTS_ARRAY_COLS_COUNT_MAX)
+    if(cols_count > POINTS_ARRAY_COLS_COUNT_MAXIMUM)
     {
-        return status_t::ARRAY_COLS_COUNT_OVERRANGE;
+        return error_codes_t::ARRAY_COLS_COUNT_OVERRANGE;
     }
 
-    if(cols_count == 0)
+    if(cols_count < POINTS_ARRAY_COLS_COUNT_MINIMUM)
     {
-        return status_t::ARRAY_COLS_COUNT_UNDERRANGE;
+        return error_codes_t::ARRAY_COLS_COUNT_UNDERRANGE;
     }
 
-    return status_t::OK;
+    return error_codes_t::OK;
 }
 
 void Points::array_clean(void)
 {
-    for(unsigned short row_num = 0; row_num < this->rows_count; row_num++)
+    for(uint8_t row_num = 0; row_num < this->rows_count; row_num++)
     {
-        for(unsigned short cols_dword_num = 0; cols_dword_num < this->cols_dwords_count; cols_dword_num++)
+        for(uint8_t cols_dword_num = 0; cols_dword_num < this->cols_dwords_count; cols_dword_num++)
         {
             this->array[row_num][cols_dword_num] = 0;
         }
@@ -263,11 +275,11 @@ void Points::array_clean(void)
     this->array_was_changed = true;
 }
 
-void Points::array_update(uint32_t ** enable_mask_array, uint32_t ** disable_mask_array)
+void Points::array_update(uint64_t ** enable_mask_array, uint64_t ** disable_mask_array)
 {
-    for(unsigned short row_num = 0; row_num < this->rows_count; row_num++)
+    for(uint8_t row_num = 0; row_num < this->rows_count; row_num++)
     {
-        for(unsigned short cols_dword_num = 0; cols_dword_num < this->cols_dwords_count; cols_dword_num++)
+        for(uint8_t cols_dword_num = 0; cols_dword_num < this->cols_dwords_count; cols_dword_num++)
         {
             this->array[row_num][cols_dword_num] &= ~(disable_mask_array[row_num][cols_dword_num]);
             this->array[row_num][cols_dword_num] |= enable_mask_array[row_num][cols_dword_num];
@@ -278,15 +290,15 @@ void Points::array_update(uint32_t ** enable_mask_array, uint32_t ** disable_mas
 
 void Points::array_print(void)
 {
-    for(unsigned short row_num = 0; row_num < this->rows_count; row_num++)
+    for(uint8_t row_num = 0; row_num < this->rows_count; row_num++)
     {
-        for(unsigned short cols_dword_num = 0; cols_dword_num < this->cols_dwords_count; cols_dword_num++)
+        for(uint8_t cols_dword_num = 0; cols_dword_num < this->cols_dwords_count; cols_dword_num++)
         {
-            uint32_t current_dword = array[row_num][cols_dword_num];
+            uint64_t current_dword = array[row_num][cols_dword_num];
             
-            for(unsigned short col_num = 0; col_num < 32 ; col_num++)
+            for(uint8_t col_num = 0; col_num < 64 ; col_num++)
             {
-                if((cols_dword_num == (cols_dwords_count - 1)) && (col_num >= (this->cols_count & 0x1F)))
+                if((cols_dword_num == (cols_dwords_count - 1)) && (col_num >= (this->cols_count & 0x3F)))
                 {
                     break;
                 }
@@ -295,41 +307,41 @@ void Points::array_print(void)
                 current_dword >>=1;
             }
         }
-        std::cout << std::endl << std::endl;
+        std::cout << "\n\n";
     }
 }
 
-void Points::point_value_set(unsigned short row, unsigned short col, unsigned short value)
+void Points::point_value_set(uint8_t row, uint8_t col, uint8_t value)
 {
     if((row >= this->rows_count) || (col >= this->cols_count)) return;
-    unsigned short dword_num = cols_dword_num_calc(col);
-    unsigned short col_mask = col_mask_calc(col);
+    uint8_t dword_num = cols_dword_num_calc(col);
+    uint64_t col_mask = col_mask_calc(col);
     dword_update((this->array[row][dword_num]), col_mask, value);
     this->array_was_changed = true;
 }
 
-unsigned short Points::point_value_get(unsigned short row, unsigned short col)
+uint8_t Points::point_value_get(uint8_t row, uint8_t col)
 {
     if((row >= this->rows_count) || (col >= this->cols_count)) return 0;
-    unsigned short dword_num = cols_dword_num_calc(col);
-    unsigned short col_mask = col_mask_calc(col);
+    uint8_t dword_num = cols_dword_num_calc(col);
+    uint64_t col_mask = col_mask_calc(col);
     return ((this->array[row][dword_num]) & col_mask) != 0;
 }
 
-unsigned short Points::enabled_points_count_get(void)
+uint16_t Points::enabled_points_count_get(void)
 {
     if(this->array_was_changed)
     {
         this->array_was_changed = false;
         this->enabled_points_count = 0;
-        for(unsigned short row_cur = 0; row_cur < this->rows_count; row_cur++)
+        for(uint8_t row_cur = 0; row_cur < this->rows_count; row_cur++)
         {
-            for(unsigned short cols_dword_num = 0; cols_dword_num < this->cols_dwords_count; cols_dword_num++)
+            for(uint8_t cols_dword_num = 0; cols_dword_num < this->cols_dwords_count; cols_dword_num++)
             {
-                uint32_t dword = this->array[row_cur][cols_dword_num];
+                uint64_t dword = this->array[row_cur][cols_dword_num];
                 do
                 {
-                    this->enabled_points_count += (unsigned short)(dword & 1);
+                    this->enabled_points_count += static_cast<uint16_t>(dword & 1);
                 }
                 while(dword = (dword >> 1));
             }
@@ -339,7 +351,7 @@ unsigned short Points::enabled_points_count_get(void)
     return this->enabled_points_count; 
 }
 
-unsigned short Points::disabled_points_count_get(void)
+uint16_t Points::disabled_points_count_get(void)
 {
-    return (this->rows_count * this->cols_count) - this->enabled_points_count_get(); 
+    return (static_cast<uint16_t>(this->rows_count) * static_cast<uint16_t>(this->cols_count)) - this->enabled_points_count_get(); 
 }

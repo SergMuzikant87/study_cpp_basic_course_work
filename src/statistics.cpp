@@ -1,7 +1,9 @@
 #include "../inc/statistics.h"
 #include <iostream>
 
-Statistics::Statistics(unsigned short enabled_points_count,unsigned short disabled_points_count, unsigned short enabled_in_step_points_count, unsigned short disabled_in_step_points_count)
+#define STATISTICS_STEP_NUM_MAXIMUM (1000)
+
+Statistics::Statistics(uint16_t enabled_points_count,uint16_t disabled_points_count, uint16_t enabled_in_step_points_count, uint16_t disabled_in_step_points_count)
 {
     this->clear();
     this->update(enabled_points_count, disabled_points_count, enabled_in_step_points_count, disabled_in_step_points_count);
@@ -9,22 +11,23 @@ Statistics::Statistics(unsigned short enabled_points_count,unsigned short disabl
 
 void Statistics::clear(void)
 {
+    this->update(0, 0, 0, 0);
     this->current_step.step_num = 0;
-    this->current_step.enabled_points_count = 0;
-    this->current_step.disabled_points_count = 0;
-    this->current_step.enabled_in_step_points_count = 0;
-    this->current_step.disabled_in_step_points_count = 0;
 }
 
-signed short Statistics::update(unsigned short enabled_points_count, unsigned short disabled_points_count, unsigned short enabled_in_step_points_count, unsigned short disabled_in_step_points_count)
+error_codes_t Statistics::update(uint16_t enabled_points_count, uint16_t disabled_points_count, uint16_t enabled_in_step_points_count, uint16_t disabled_in_step_points_count)
 {
-    this->current_step.step_num++;
+    if((this->current_step.step_num = this->current_step.step_num + 1) > STATISTICS_STEP_NUM_MAXIMUM)
+    {
+        return error_codes_t::STATISTICS_STEP_NUM_OVERRANGE;
+    }
+
     this->current_step.enabled_points_count = enabled_points_count;
     this->current_step.disabled_points_count = disabled_points_count;
     this->current_step.enabled_in_step_points_count = enabled_in_step_points_count;
     this->current_step.disabled_in_step_points_count = disabled_in_step_points_count;
 
-    return ((signed short)enabled_in_step_points_count) - ((signed short)disabled_in_step_points_count);
+    return error_codes_t::OK;
 }
 
 void Statistics::print(void)

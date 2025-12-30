@@ -2,15 +2,16 @@
 #define _INC_APP_H_
 
     #include "../inc/settings.h"
-    #include "../inc/status_codes.h"
+    #include "../inc/errors.h"
 
     class App
     {
-        public:
+        private:
             Settings * settings;
-
+            
+        public:
             App(Settings * settings);
-            status_t run(void);
+            error_codes_t run(void);
     };
 
 #endif

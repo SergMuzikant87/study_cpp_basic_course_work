@@ -1,19 +1,19 @@
-#include "../inc/status_codes.h"
+#include "../inc/errors.h"
 #include "../inc/settings.h"
 #include "../inc/app.h"
 #include "../inc/help.h"
 #include <iostream>
 #include <clocale>
 
-int main(int argc, char * argv [])
+int main(int arguments_count, char * arguments [])
 {   
     setlocale(LC_ALL, "Russian");
 
-    status_t error_code = status_t::OK;
-    Settings settings(argc, argv, &error_code);
-    if(error_code != status_t::OK)
+    error_codes_t error_code = error_codes_t::OK;
+    Settings settings(arguments_count, arguments, &error_code);
+    if(error_code != error_codes_t::OK)
     {
-        std::cout << "ERROR: Ошибка чтения опций программы. Код ошибки: " << error_code << std::endl;
+        error_print("ERROR: Ошибка чтения опций программы.", error_code);
         return error_code;
     }
     
@@ -24,15 +24,15 @@ int main(int argc, char * argv [])
     else
     {
         help_print(); 
-        return status_t::OK;
+        return error_codes_t::OK;
     }
 
     App app(&settings);
-    if((error_code = app.run()) != status_t::OK)
+    if((error_code = app.run()) != error_codes_t::OK)
     {
-        std::cout << "ERROR: Ошибка выполнения программы. Код ошибки: " << error_code << std::endl;
+        error_print("ERROR: Ошибка выполнения программы.", error_code);
         return error_code;
     }
 
-    return status_t::OK;
+    return error_codes_t::OK;
 }
