@@ -3,7 +3,7 @@
 #include "../inc/statistics.h"
 #include <iostream>
 #include <cstdlib>
-#ifdef WIN32
+#ifdef _WIN32
     #include "windows.h"
 #else
     #include <unistd.h>
@@ -55,7 +55,7 @@ error_codes_t App::run(void)
     std::cout << "Для запуска нажмите клавишу \'ENTER\': ", std::cin.get();
 
     //Вывод на экран начального состояния точек
-    #ifdef WIN32
+    #ifdef _WIN32
         std::system("CLS");
     #else
         std::system("clear");
@@ -68,7 +68,7 @@ error_codes_t App::run(void)
     while(permision_stop == 0)
     {
         //Пауза
-        #ifdef WIN32
+        #ifdef _WIN32
             Sleep(static_cast<uint32_t>(this->settings->step_time_sec) * static_cast<uint32_t>(1000));
         #else
             sleep(static_cast<unsigned int>(this->settings->step_time_sec));
