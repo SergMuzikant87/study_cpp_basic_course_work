@@ -131,7 +131,7 @@ error_codes_t App::run(void)
         }
 
         //Вывод на экран точек и статистики за текущий шаг
-        #ifdef WIN32
+        #ifdef _WIN32
             std::system("CLS");
         #else
             std::system("clear");
