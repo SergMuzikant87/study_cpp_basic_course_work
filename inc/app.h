@@ -12,6 +12,8 @@
         public:
             App(Settings * settings);
             error_codes_t run(void);
+            void pause(void);
+            error_codes_t display_clear(void);
     };
 
 #endif

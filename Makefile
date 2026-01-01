@@ -1,13 +1,12 @@
 CC := g++
 FLAGS := -Wall -O2 -std=c++11
+SRC_FORDER := src/
+INC_FORDER := inc/
+SRC_FILES := $(wildcard $(SRC_FORDER)*.cpp)
+INC_FILES := $(wildcard $(INC_FORDER)*.h)
+PROGRAMM_NAME:= programm
 
-build:
-	$(CC) -c src/settings.cpp -o settings.o
-	$(CC) -c src/points.cpp -o points.o
-	$(CC) -c src/app.cpp -o app.o
-	$(CC) -c src/statistics.cpp -o statistics.o
-	$(CC) -c src/help.cpp -o help.o
-	$(CC) -c src/errors.cpp -o errors.o
-	$(CC) -c src/main.cpp -o main.o
-	
-	$(CC) settings.o points.o app.o statistics.o help.o errors.o main.o -o programm
+link: compile
+	$(CC) $(FLAGS) $(wildcard $(addsuffix .o, $(basename $(notdir $(SRC_FILES))))) -o $(PROGRAMM_NAME)
+compile:
+	$(CC) $(FLAGS) -c $(SRC_FILES)

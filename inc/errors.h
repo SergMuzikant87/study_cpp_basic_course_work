@@ -36,6 +36,8 @@ typedef enum
 
     STATISTICS_STEP_NUM_OVERRANGE = 60,
 
+    DISPLAY_CLEAR_ERROR = 70
+
 }error_codes_t;
 
 void error_print(const char * error_text, error_codes_t error_code);

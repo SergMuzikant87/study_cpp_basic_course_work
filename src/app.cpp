@@ -55,11 +55,11 @@ error_codes_t App::run(void)
     std::cout << "Для запуска нажмите клавишу \'ENTER\': ", std::cin.get();
 
     //Вывод на экран начального состояния точек
-    #ifdef _WIN32
-        std::system("CLS");
-    #else
-        std::system("clear");
-    #endif
+    if((error_code = App::display_clear()) != error_codes_t::OK)
+    {
+        error_print("ERROR: Ошибка выполнения функции очистки экрана.", error_code);
+        return error_code;
+    }
     points.array_print();
     statistics.print();
 
@@ -68,11 +68,7 @@ error_codes_t App::run(void)
     while(permision_stop == 0)
     {
         //Пауза
-        #ifdef _WIN32
-            Sleep(static_cast<uint32_t>(this->settings->step_time_sec) * static_cast<uint32_t>(1000));
-        #else
-            sleep(static_cast<unsigned int>(this->settings->step_time_sec));
-        #endif
+        this->pause();
         
         //Очистка масок разрешений на включение и выключение точек
         points_enable_mask.array_clean();
@@ -131,11 +127,11 @@ error_codes_t App::run(void)
         }
 
         //Вывод на экран точек и статистики за текущий шаг
-        #ifdef _WIN32
-            std::system("CLS");
-        #else
-            std::system("clear");
-        #endif
+        if((error_code = this->display_clear()) != error_codes_t::OK)
+        {
+            error_print("ERROR: Ошибка выполнения функции очистки экрана.", error_code);
+            return error_code;
+        }
         points.array_print();
         statistics.print();
         
@@ -148,4 +144,26 @@ error_codes_t App::run(void)
     std::cout << (((permision_stop < 0) ? "Все точки выключены." : "Значения точек не меняются.")) << std::endl; 
   
     return error_codes_t::OK;
+}
+
+error_codes_t App::display_clear(void)
+{
+#ifdef _WIN32
+    if(std::system("CLS") != 0)
+#else
+    if(std::system("clear") != 0)
+#endif
+    {
+        return error_codes_t::DISPLAY_CLEAR_ERROR;
+    }
+    return error_codes_t::OK;
+}
+
+void App::pause(void)
+{
+    #ifdef _WIN32
+        Sleep(static_cast<uint32_t>(this->settings->step_time_sec) * static_cast<uint32_t>(1000));
+    #else
+        sleep(static_cast<unsigned int>(this->settings->step_time_sec));
+    #endif
 }

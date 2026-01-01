@@ -5,7 +5,7 @@
     #include <cstdint>
 
     #define DEFAULT_HELP_PRINT (false)
-    #define DEFAULT_CONFIG_FILE_ADDR ((char *)"test_config_file.txt")
+    #define DEFAULT_CONFIG_FILE_ADDR ((char *)"config_files/test_config_file.txt")
     #define DEFAULT_STEP_TIME_SEC (3)
     #define MINIMUM_STEP_TIME_SEC (0)
     #define MAXIMUM_STEP_TIME_SEC (30)

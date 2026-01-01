@@ -343,7 +343,7 @@ uint16_t Points::enabled_points_count_get(void)
                 {
                     this->enabled_points_count += static_cast<uint16_t>(dword & 1);
                 }
-                while(dword = (dword >> 1));
+                while((dword >>= 1));
             }
         }
     }
